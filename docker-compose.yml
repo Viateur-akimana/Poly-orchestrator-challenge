@@ -1,0 +1,91 @@
+version: '3.8'
+
+# Root docker-compose: orchestrates all 4 tiers locally
+# Usage: docker compose up --build
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: skyline-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-skyline}
+      POSTGRES_USER: ${POSTGRES_USER:-skyline_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-skyline_pass}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - skyline-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-skyline_user} -d ${POSTGRES_DB:-skyline}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: skyline-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - skyline-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./skyline-backend
+      dockerfile: Dockerfile
+      target: runner
+    container_name: skyline-api
+    environment:
+      NODE_ENV: production
+      PORT: 5004
+      DATABASE_URL: postgresql://${POSTGRES_USER:-skyline_user}:${POSTGRES_PASSWORD:-skyline_pass}@postgres:5432/${POSTGRES_DB:-skyline}
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret-change-in-production}
+      CLIENT_URL: http://localhost:80
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@skyline.local}
+    ports:
+      - "5004:5004"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - skyline-net
+    volumes:
+      - ./skyline-backend/uploads:/app/uploads
+    command: sh -c "npx prisma migrate deploy && node dist/server.js"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./skyline-ifrontend
+      dockerfile: Dockerfile
+    container_name: skyline-frontend
+    environment:
+      BACKEND_HOST: backend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - skyline-net
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  skyline-net:
+    driver: bridge

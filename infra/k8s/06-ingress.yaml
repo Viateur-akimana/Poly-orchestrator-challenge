@@ -1,0 +1,40 @@
+---
+# AWS Load Balancer Controller must be installed in the cluster first.
+# Install: https://docs.aws.amazon.com/eks/latest/userguide/aws-load-balancer-controller.html
+#
+# Path-based routing:
+#   /api/*  → backend service (port 5004)
+#   /*      → frontend service (port 80, nginx serves SPA + proxies /api)
+#
+# Using the frontend service for all routes is simpler because nginx
+# already proxies /api internally. The Ingress here just exposes port 80.
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: skyline-ingress
+  namespace: skyline
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "30"
+    alb.ingress.kubernetes.io/healthy-threshold-count: "2"
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: "3"
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+    # Uncomment for HTTPS:
+    # alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443}]'
+    # alb.ingress.kubernetes.io/certificate-arn: <ACM_CERT_ARN>
+    # alb.ingress.kubernetes.io/ssl-redirect: "443"
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80

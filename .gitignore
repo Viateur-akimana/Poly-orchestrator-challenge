@@ -1,0 +1,46 @@
+# ── Node.js ──────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.tsbuildinfo
+dist/
+build/
+
+# ── Environment / Secrets ────────────────────────────────
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+
+# ── Terraform ────────────────────────────────────────────
+**/.terraform/
+**/.terraform.lock.hcl
+**/terraform.tfstate
+**/terraform.tfstate.backup
+**/terraform.tfstate.d/
+# Keep example files, block real tfvars (contain secrets)
+**/terraform.tfvars
+!**/terraform.tfvars.example
+
+# ── Docker ───────────────────────────────────────────────
+*.log
+
+# ── Editor / OS ──────────────────────────────────────────
+.vscode/
+.idea/
+.qodo/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# ── Coverage / Test output ───────────────────────────────
+coverage/
+.nyc_output/
+
+# ── Misc ─────────────────────────────────────────────────
+tmp/
+temp/
+uploads/
