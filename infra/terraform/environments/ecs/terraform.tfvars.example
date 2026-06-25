@@ -1,0 +1,13 @@
+project     = "skyline"
+environment = "prod"
+aws_region  = "us-east-1"
+
+# Secrets — set via TF_VAR_* env vars or CI/CD secrets, never commit real values
+db_password        = "CHANGE_ME"
+jwt_secret         = "CHANGE_ME"
+jwt_refresh_secret = "CHANGE_ME"
+admin_email        = "admin@yourdomain.com"
+
+# Set after pushing images to ECR (run `terraform output ecr_*_url` first)
+frontend_image = "123456789.dkr.ecr.us-east-1.amazonaws.com/skyline-prod-frontend:latest"
+backend_image  = "123456789.dkr.ecr.us-east-1.amazonaws.com/skyline-prod-backend:latest"

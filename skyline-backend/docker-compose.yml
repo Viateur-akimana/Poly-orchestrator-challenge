@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: skyline-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-skyline}
+      POSTGRES_USER: ${POSTGRES_USER:-skyline_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - backend-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-skyline_user} -d ${POSTGRES_DB:-skyline}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: skyline-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - backend-network
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    container_name: skyline-api
+    env_file:
+      - .env
+    ports:
+      - "${PORT:-5004}:5004"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - backend-network
+    volumes:
+      - ./uploads:/app/uploads
+      - ./certs:/app/certs
+    restart: unless-stopped
+    command: sh -c "npx prisma migrate deploy && node dist/server.js"
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  backend-network:
+    driver: bridge

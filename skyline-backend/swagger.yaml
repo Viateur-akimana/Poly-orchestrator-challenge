@@ -1,0 +1,261 @@
+openapi: 3.0.0
+info:
+  title: SKYLINE Transfers API
+  description: Secure money transfer service from Russia to Rwanda
+  version: 1.0.0
+  contact:
+    name: SKYLINE Transfers
+    email: support@skylinetransfers.com
+
+servers:
+  - url: http://localhost:3000/api
+    description: Development server
+  - url: https://api.skylinetransfers.com/api
+    description: Production server
+
+paths:
+  /auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                firstName:
+                  type: string
+                lastName:
+                  type: string
+                email:
+                  type: string
+                phoneNumber:
+                  type: string
+                password:
+                  type: string
+      responses:
+        201:
+          description: User registered successfully
+
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: User login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+      responses:
+        200:
+          description: Login successful
+
+  /transfer-orders:
+    post:
+      tags:
+        - Transfers
+      summary: Create new transfer order
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                recipientName:
+                  type: string
+                recipientPhone:
+                  type: string
+                sendAmount:
+                  type: number
+                notes:
+                  type: string
+      responses:
+        201:
+          description: Transfer order created
+
+    get:
+      tags:
+        - Transfers
+      summary: Get user transfers
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: List of user transfers
+
+  /transfer-orders/{transferId}:
+    get:
+      tags:
+        - Transfers
+      summary: Get specific transfer
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: transferId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Transfer details
+
+  /self-service/{transferId}/payment-instructions:
+    get:
+      tags:
+        - Self-Service Payment
+      summary: Get payment instructions
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: transferId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: amount
+          in: query
+          required: true
+          schema:
+            type: number
+      responses:
+        200:
+          description: Payment instructions with Sberbank card details
+
+  /self-service/{transferId}/submit-payment:
+    post:
+      tags:
+        - Self-Service Payment
+      summary: Submit payment confirmation
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: transferId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                paymentMethod:
+                  type: string
+                  enum: [SBERBANK_MANUAL]
+                paymentDetails:
+                  type: object
+                  properties:
+                    confirmation:
+                      type: boolean
+                    paymentDate:
+                      type: string
+      responses:
+        200:
+          description: Payment confirmed, MTN payout initiated
+
+  /self-service/{transferId}/status:
+    get:
+      tags:
+        - Self-Service Payment
+      summary: Get payment status
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: transferId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Payment and transfer status
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Transfer:
+      type: object
+      properties:
+        id:
+          type: string
+        reference:
+          type: string
+        senderName:
+          type: string
+        recipientName:
+          type: string
+        recipientPhone:
+          type: string
+        sendAmount:
+          type: number
+        receiveAmount:
+          type: number
+        status:
+          type: string
+          enum: [PENDING, PAYMENT_VERIFIED, PROCESSING, COMPLETED, CANCELLED]
+        createdAt:
+          type: string
+          format: date-time
+
+    PaymentInstructions:
+      type: object
+      properties:
+        transferId:
+          type: string
+        amount:
+          type: number
+        options:
+          type: array
+          items:
+            type: object
+            properties:
+              method:
+                type: string
+              title:
+                type: string
+              description:
+                type: string
+              instructions:
+                type: array
+                items:
+                  type: string
+              sberbankDetails:
+                type: object
+                properties:
+                  cardNumber:
+                    type: string
+                  cardHolder:
+                    type: string
+                  amount:
+                    type: string
+                  comment:
+                    type: string
+
+tags:
+  - name: Authentication
+    description: User authentication endpoints
+  - name: Transfers
+    description: Money transfer operations
+  - name: Self-Service Payment
+    description: Customer self-service payment system

@@ -1,0 +1,542 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                      String              @id @default(uuid())
+  email                   String              @unique
+  password                String
+  firstName               String
+  lastName                String
+  phoneNumber             String?
+  phoneVerified           Boolean             @default(false)
+  emailVerified           Boolean             @default(false)
+  verificationToken       String?
+  resetToken              String?
+  lastLogin               DateTime?
+  role                    UserRole            @default(USER)
+  status                  UserStatus          @default(ACTIVE)
+  notificationPreferences Json?
+  referralCode            String?             @unique
+  twoFactorEnabled        Boolean             @default(false)
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
+  resetTokenExpiry        DateTime?
+  verificationTokenExpiry DateTime?
+  auditLogs               AuditLog[]
+  bankAccounts            BankAccount[]
+  kycDocuments            KycDocument[]
+  kycVerification         KycVerification?
+  notifications           Notification[]
+  otpCodes                OtpCode[]
+  profile                 Profile?
+  recipients              Recipient[]
+  recurringTransfers      RecurringTransfer[]
+  referredBy              Referral[]          @relation("UserReferred")
+  referrals               Referral[]          @relation("UserReferrals")
+  sessions                Session[]
+  transferOrders          TransferOrder[]
+  PushSubscription        PushSubscription[]
+}
+
+model Profile {
+  id          String    @id @default(uuid())
+  userId      String    @unique
+  dateOfBirth DateTime?
+  address     String?
+  city        String?
+  country     String    @default("Rwanda")
+  postalCode  String?
+  avatarUrl   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  user        User      @relation(fields: [userId], references: [id])
+}
+
+model TransferOrder {
+  id                 String            @id @default(uuid())
+  reference          String            @unique
+  userId             String
+  senderName         String
+  senderPhone        String
+  recipientName      String
+  recipientPhone     String
+  recipientNetwork   MobileNetwork     @default(MTN)
+  fromCurrencyId     String
+  toCurrencyId       String
+  sendAmount         Decimal           @db.Decimal(15, 2)
+  receiveAmount      Decimal           @db.Decimal(15, 2)
+  exchangeRate       Decimal           @db.Decimal(15, 8)
+  exchangeRateId     String?
+  fee                Decimal           @default(100.00) @db.Decimal(10, 2)
+  totalAmount        Decimal           @db.Decimal(15, 2)
+  status             TransferStatus    @default(PENDING)
+  paymentStatus      PaymentStatus     @default(PENDING)
+  paymentMethodType  PaymentMethodType @default(BANK_TRANSFER)
+  mtnTransactionId   String?
+  mtnResponse        Json?
+  paidAt             DateTime?
+  processedAt        DateTime?
+  processedById      String?
+  adminNotes         String?
+  cancellationReason String?
+  cancelledAt        DateTime?
+  cancelledBy        String?
+  completedAt        DateTime?
+  notes              String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  attempts           Int               @default(0)
+  externalStatus     String?
+  idempotencyKey     String?           @unique
+  lastAttemptAt      DateTime?
+  paymentLink        String?
+  sbpOrderId         String?
+  deliveryMethod     String            @default("mobile_money")
+  auditLogs          AuditLog[]
+  paymentProofs      PaymentProof[]
+  fromCurrency       Currency          @relation("FromCurrency", fields: [fromCurrencyId], references: [id])
+  toCurrency         Currency          @relation("ToCurrency", fields: [toCurrencyId], references: [id])
+  user               User              @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([fromCurrencyId, toCurrencyId])
+}
+
+model PaymentProof {
+  id              String        @id @default(uuid())
+  transferOrderId String
+  fileUrl         String
+  fileType        String
+  fileSize        Int
+  uploadedBy      String
+  verified        Boolean       @default(false)
+  verifiedBy      String?
+  verifiedAt      DateTime?
+  rejectionReason String?
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  transferOrder   TransferOrder @relation(fields: [transferOrderId], references: [id])
+}
+
+model BankAccount {
+  id            String    @id @default(uuid())
+  userId        String
+  bankName      String
+  accountNumber String
+  accountName   String
+  branchCode    String?
+  swiftCode     String?
+  currency      String    @default("RUB")
+  isDefault     Boolean   @default(false)
+  isVerified    Boolean   @default(false)
+  verifiedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  user          User      @relation(fields: [userId], references: [id])
+
+  @@unique([userId, accountNumber])
+}
+
+model Notification {
+  id        String             @id @default(uuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String
+  data      Json?
+  status    NotificationStatus @default(PENDING)
+  channels  String[]
+  readAt    DateTime?
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  user      User               @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model AuditLog {
+  id              String         @id @default(uuid())
+  userId          String?
+  action          AuditAction
+  entityType      String
+  entityId        String?
+  oldData         Json?
+  newData         Json?
+  ipAddress       String?
+  userAgent       String?
+  transferOrderId String?
+  createdAt       DateTime       @default(now())
+  transferOrder   TransferOrder? @relation(fields: [transferOrderId], references: [id])
+  user            User?          @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  userId       String
+  refreshToken String   @unique
+  userAgent    String?
+  ipAddress    String?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+model Currency {
+  id                     String              @id @default(uuid())
+  code                   String              @unique
+  name                   String
+  symbol                 String
+  isActive               Boolean             @default(true)
+  isFiat                 Boolean             @default(true)
+  decimals               Int                 @default(2)
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+  exchangeRatesFrom      ExchangeRate[]      @relation("FromCurrency")
+  exchangeRatesTo        ExchangeRate[]      @relation("ToCurrency")
+  paymentMethods         PaymentMethod[]
+  recurringTransfersFrom RecurringTransfer[] @relation("RecurringFromCurrency")
+  recurringTransfersTo   RecurringTransfer[] @relation("RecurringToCurrency")
+  transferOrdersFrom     TransferOrder[]     @relation("FromCurrency")
+  transferOrdersTo       TransferOrder[]     @relation("ToCurrency")
+}
+
+model ExchangeRate {
+  id             String    @id @default(uuid())
+  fromCurrencyId String
+  toCurrencyId   String
+  rate           Decimal   @db.Decimal(15, 8)
+  spread         Decimal   @default(0.02) @db.Decimal(5, 4)
+  isActive       Boolean   @default(true)
+  validFrom      DateTime  @default(now())
+  validTo        DateTime?
+  source         String?
+  createdBy      String?
+  updatedBy      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  fromCurrency   Currency  @relation("FromCurrency", fields: [fromCurrencyId], references: [id])
+  toCurrency     Currency  @relation("ToCurrency", fields: [toCurrencyId], references: [id])
+
+  @@unique([fromCurrencyId, toCurrencyId])
+  @@index([isActive, validFrom])
+}
+
+model PaymentMethod {
+  id             String            @id @default(uuid())
+  name           String
+  type           PaymentMethodType
+  currencyId     String
+  isActive       Boolean           @default(true)
+  minAmount      Decimal?          @db.Decimal(15, 2)
+  maxAmount      Decimal?          @db.Decimal(15, 2)
+  fee            Decimal           @default(0) @db.Decimal(10, 2)
+  feeType        FeeType           @default(FIXED)
+  processingTime String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  currency       Currency          @relation(fields: [currencyId], references: [id])
+
+  @@index([isActive, currencyId])
+}
+
+model OtpCode {
+  id        String   @id @default(uuid())
+  userId    String
+  code      String
+  type      OtpType
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@index([expiresAt])
+}
+
+model RecurringTransfer {
+  id              String            @id @default(uuid())
+  userId          String
+  templateName    String
+  recipientName   String
+  recipientPhone  String
+  fromCurrencyId  String
+  toCurrencyId    String
+  amount          Decimal           @db.Decimal(15, 2)
+  frequency       TransferFrequency
+  nextExecutionAt DateTime
+  lastExecutedAt  DateTime?
+  isActive        Boolean           @default(true)
+  totalExecutions Int               @default(0)
+  maxExecutions   Int?
+  endDate         DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  fromCurrency    Currency          @relation("RecurringFromCurrency", fields: [fromCurrencyId], references: [id])
+  toCurrency      Currency          @relation("RecurringToCurrency", fields: [toCurrencyId], references: [id])
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([nextExecutionAt, isActive])
+}
+
+model Recipient {
+  id           String   @id @default(uuid())
+  userId       String
+  name         String
+  phone        String
+  relationship String   @default("Other")
+  location     String   @default("Rwanda")
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Promotion {
+  id          String        @id @default(uuid())
+  title       String
+  description String
+  code        String        @unique
+  type        PromotionType
+  value       Float
+  maxDiscount Float?
+  minAmount   Float?
+  validUntil  DateTime
+  isActive    Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model Referral {
+  id          String   @id @default(uuid())
+  referrerId  String
+  referredId  String
+  bonusAmount Float    @default(0)
+  isCompleted Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  referred    User     @relation("UserReferred", fields: [referredId], references: [id], onDelete: Cascade)
+  referrer    User     @relation("UserReferrals", fields: [referrerId], references: [id], onDelete: Cascade)
+
+  @@unique([referrerId, referredId])
+}
+
+model KycDocument {
+  id              String       @id @default(uuid())
+  userId          String
+  type            DocumentType
+  fileName        String
+  fileUrl         String
+  fileSize        Int
+  mimeType        String
+  status          KycStatus    @default(PENDING)
+  rejectionReason String?
+  verifiedBy      String?
+  verifiedAt      DateTime?
+  expiryDate      DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+}
+
+model KycVerification {
+  id                String    @id @default(uuid())
+  userId            String    @unique
+  overallStatus     KycStatus @default(PENDING)
+  identityStatus    KycStatus @default(PENDING)
+  addressStatus     KycStatus @default(PENDING)
+  selfieStatus      KycStatus @default(PENDING)
+  verificationLevel Int       @default(1)
+  rejectionReason   String?
+  verifiedBy        String?
+  verifiedAt        DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([overallStatus])
+}
+
+model SystemSettings {
+  id                  String   @id @default(uuid())
+  cardNumber          String?
+  cardHolderName      String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  rwandaBankAccount   String?
+  rwandaMobileMoney   String?
+  rwandaRecipientName String?
+}
+
+enum UserRole {
+  USER
+  ADMIN
+  SUPPORT
+  COMPLIANCE
+  FINANCE
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING_VERIFICATION
+}
+
+enum MobileNetwork {
+  MTN
+  AIRTEL
+  TIGO
+}
+
+enum TransferStatus {
+  DRAFT
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+  REFUNDED
+  PENDING_PAYMENT
+  PAID_AWAITING_APPROVAL
+}
+
+enum PaymentStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+  REFUNDED
+  PENDING_VERIFICATION
+}
+
+enum PaymentMethodType {
+  BANK_TRANSFER
+  CREDIT_CARD
+  DEBIT_CARD
+  MOBILE_MONEY
+  DIGITAL_WALLET
+  OTHER
+}
+
+enum OtpType {
+  LOGIN
+  TRANSFER
+  SETTINGS_CHANGE
+  PASSWORD_RESET
+}
+
+enum TransferFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+}
+
+enum FeeType {
+  FIXED
+  PERCENTAGE
+  TIERED
+}
+
+enum NotificationType {
+  TRANSFER_CREATED
+  TRANSFER_UPDATED
+  TRANSFER_COMPLETED
+  TRANSFER_FAILED
+  TRANSFER_CANCELLED
+  PAYMENT_RECEIVED
+  PAYMENT_SENT
+  PAYMENT_PROOF_UPLOADED
+  ACCOUNT_VERIFIED
+  PASSWORD_RESET
+  LOGIN_ALERT
+  SECURITY_ALERT
+  ADMIN_ALERT
+  SYSTEM_MAINTENANCE
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+enum DocumentType {
+  PASSPORT
+  NATIONAL_ID
+  DRIVERS_LICENSE
+  PROOF_OF_ADDRESS
+  BANK_STATEMENT
+  UTILITY_BILL
+  SELFIE
+}
+
+enum KycStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+enum PromotionType {
+  PERCENTAGE
+  FIXED
+  FREE_TRANSFER
+}
+
+enum AuditAction {
+  CREATE
+  READ
+  UPDATE
+  DELETE
+  TRANSFER_ORDER_CREATED
+  TRANSFER_ORDER_UPDATED
+  TRANSFER_ORDER_COMPLETED
+  TRANSFER_ORDER_CANCELLED
+  PAYMENT_UPLOADED
+  PAYMENT_VERIFIED
+  LOGIN
+  LOGOUT
+  PASSWORD_CHANGE
+  PROFILE_UPDATE
+}
+
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
