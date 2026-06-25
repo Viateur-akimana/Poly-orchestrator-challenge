@@ -1,4 +1,5 @@
 FROM node:20-slim AS base
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
 
 # Install dependencies only when needed
 FROM base AS deps
