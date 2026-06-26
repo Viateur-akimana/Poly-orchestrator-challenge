@@ -103,13 +103,19 @@ jobs:
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           TAG: ${{ steps.tag.outputs.TAG }}
-        run: docker push "$ECR_REGISTRY/$ECR_BACKEND_REPO:$TAG"
+        run: |
+          docker push "$ECR_REGISTRY/$ECR_BACKEND_REPO:$TAG" || \
+          aws ecr describe-images --repository-name "$ECR_BACKEND_REPO" \
+            --image-ids imageTag="$TAG" --region "$AWS_REGION" > /dev/null
 
       - name: Push frontend image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           TAG: ${{ steps.tag.outputs.TAG }}
-        run: docker push "$ECR_REGISTRY/$ECR_FRONTEND_REPO:$TAG"
+        run: |
+          docker push "$ECR_REGISTRY/$ECR_FRONTEND_REPO:$TAG" || \
+          aws ecr describe-images --repository-name "$ECR_FRONTEND_REPO" \
+            --image-ids imageTag="$TAG" --region "$AWS_REGION" > /dev/null
 
       - name: Deploy to EKS
         env:
