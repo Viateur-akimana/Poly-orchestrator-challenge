@@ -7,6 +7,7 @@
     "start": "node --max-old-space-size=512 dist/server.js",
     "dev": "ts-node-dev --respawn --transpile-only --no-notify --exit-child -- src/server.ts",
     "build": "node --max-old-space-size=1024 ./node_modules/.bin/tsc",
+    "lint": "eslint src/",
     "test": "jest --coverage",
     "test:watch": "jest --watch",
     "db:migrate": "prisma migrate dev",
@@ -51,6 +52,7 @@
     "zod": "^3.22.4"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/bcryptjs": "^3.0.0",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.3",
@@ -64,6 +66,10 @@
     "@types/swagger-jsdoc": "^6.0.4",
     "@types/swagger-ui-express": "^4.1.8",
     "@types/uuid": "^9.0.7",
+    "@typescript-eslint/eslint-plugin": "^8.62.0",
+    "@typescript-eslint/parser": "^8.62.0",
+    "eslint": "^10.5.0",
+    "globals": "^17.7.0",
     "jest": "^30.4.2",
     "supertest": "^7.2.2",
     "ts-jest": "^29.4.11",

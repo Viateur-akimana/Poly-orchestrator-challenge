@@ -1,0 +1,45 @@
+---
+# Namespace-level resource ceiling — prevents runaway pods from exhausting
+# node capacity and keeps cost predictable.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: skyline-quota
+  namespace: skyline
+spec:
+  hard:
+    # Compute
+    requests.cpu: "4"
+    requests.memory: 8Gi
+    limits.cpu: "8"
+    limits.memory: 16Gi
+    # Object counts
+    pods: "30"
+    services: "10"
+    persistentvolumeclaims: "5"
+    secrets: "20"
+    configmaps: "10"
+
+---
+# Per-container defaults and floors — ensures every container declares requests
+# so the HPA and scheduler can make accurate decisions.
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: skyline-limits
+  namespace: skyline
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: 250m
+        memory: 256Mi
+      defaultRequest:
+        cpu: 100m
+        memory: 128Mi
+      max:
+        cpu: "2"
+        memory: 4Gi
+      min:
+        cpu: 50m
+        memory: 64Mi

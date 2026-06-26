@@ -35,6 +35,10 @@ spec:
           # CI replaces FRONTEND_IMAGE_TAG with the git SHA before kubectl apply
           image: 764988411222.dkr.ecr.us-east-1.amazonaws.com/skyline-prod-frontend:${FRONTEND_IMAGE_TAG}
           imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           ports:
             - containerPort: 80
           env:

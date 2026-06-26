@@ -36,11 +36,21 @@ spec:
           labelSelector:
             matchLabels:
               app: backend
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
       containers:
         - name: backend
           # CI replaces BACKEND_IMAGE_TAG with the git SHA before kubectl apply
           image: 764988411222.dkr.ecr.us-east-1.amazonaws.com/skyline-prod-backend:${BACKEND_IMAGE_TAG}
           imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: false
           ports:
             - containerPort: 5004
           env:

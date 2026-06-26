@@ -7,6 +7,7 @@
 ## Table of Contents
 
 - [What is Skyline?](#what-is-skyline)
+- [Production Hardening](#production-hardening)
 - [Architecture Overview](#architecture-overview)
 - [Technology Stack](#technology-stack)
 - [Project Structure](#project-structure)
@@ -22,6 +23,107 @@
   - [Step 5 — Apply Kubernetes Manifests](#step-5--apply-kubernetes-manifests)
 - [Deployment Screenshots](#deployment-screenshots)
 - [Teardown](#teardown)
+
+---
+
+## Production Hardening
+
+Six production gaps were identified and resolved after the initial submission. Each fix is traceable to a git commit on `main`.
+
+### 1 — CI/CD Pipeline (`.github/workflows/ci.yml`)
+
+A full GitHub Actions pipeline runs on every push to `main`:
+
+```
+Lint → Type-check → Unit + Integration tests → Build Docker images
+→ Trivy CRITICAL scan → Push to ECR (immutable SHA tag) → Deploy to EKS
+```
+
+- **OIDC role assumption** — no long-lived AWS access keys stored in GitHub secrets; the workflow assumes `arn:aws:iam::764988411222:role/skyline-github-actions` via `aws-actions/configure-aws-credentials@v4`.
+- **Immutable image tags** — images are tagged with `github.sha` only; ECR repositories use `IMMUTABLE` tag mutability so a tag can never be overwritten.
+- **Trivy scanning** — both backend and frontend images are scanned for CRITICAL CVEs with `ignore-unfixed: true` before push. The pipeline fails if any fixable CRITICAL CVE is found.
+
+### 2 — Automated Tests (`skyline-backend/src/__tests__/`)
+
+**78 tests across 6 suites** (run in CI before every build):
+
+| Suite | Type | Count | What it covers |
+|---|---|---|---|
+| `errors.test.ts` | Unit | 10 | `AppError` subclasses — status codes, messages, codes |
+| `retry.test.ts` | Unit | 7 | `withExponentialBackoff` — success, retry, backoff, custom predicates |
+| `validation.test.ts` | Unit | 35 | `Validators` (phone, email, UUID, amounts) + `validateFields` |
+| `health.test.ts` | Integration | 3 | `GET /health` — DB up/down, 404 handling |
+| `auth.test.ts` | Integration | 18 | Register, login, `GET /me`, logout — success and error paths |
+| `public.test.ts` | Integration | 5 | Exchange rate (all directions), bank details — success and error paths |
+
+Integration tests use a real Express app with mocked Prisma/Redis so no infrastructure is needed in CI.
+
+### 3 — HTTPS (`infra/k8s/06-ingress.yaml`)
+
+The ALB Ingress is configured with an ACM certificate and forces HTTP → HTTPS redirect:
+
+```yaml
+alb.ingress.kubernetes.io/certificate-arn: <ACM_CERT_ARN>
+alb.ingress.kubernetes.io/ssl-redirect: "443"
+alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
+```
+
+`ACM_CERT_ARN` is stored as a GitHub secret and substituted by `envsubst` during the CI deploy step.
+
+### 4 — Secrets Management (`infra/k8s/00b-external-secrets.yaml`)
+
+No plaintext credentials exist anywhere in the repository.
+
+| Secret | AWS Secrets Manager key | Kubernetes secret |
+|---|---|---|
+| `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | `skyline/postgres` | `postgres-secret` |
+| `JWT_SECRET`, `JWT_REFRESH_SECRET`, `POSTGRES_PASSWORD` | `skyline/backend` | `backend-secret` |
+
+The **External Secrets Operator** (ESO v2.6.0) pulls secrets at pod startup using IRSA — the `external-secrets` service account assumes the `skyline-external-secrets` IAM role, which has `secretsmanager:GetSecretValue` on `arn:aws:secretsmanager:us-east-1:764988411222:secret:skyline/*`.
+
+### 5 — Terraform Remote State (`infra/terraform/environments/*/backend.tf`)
+
+All three Terraform environments (shared, ECS, EKS) use S3 remote state with native locking:
+
+```hcl
+terraform {
+  backend "s3" {
+    bucket       = "skyline-terraform-state-764988411222"
+    key          = "<env>/terraform.tfstate"
+    region       = "us-east-1"
+    encrypt      = true
+    use_lockfile = true   # native S3 conditional writes — no DynamoDB needed
+  }
+}
+```
+
+The bootstrap module (`infra/terraform/bootstrap/`) provisions the S3 bucket with versioning, SSE-S3 encryption, and public-access block.
+
+### 6 — HA NAT Gateways (`infra/terraform/modules/vpc/main.tf`)
+
+Replaced the single NAT Gateway with one EIP + one NAT Gateway per AZ:
+
+```hcl
+resource "aws_nat_gateway" "this" {
+  count         = length(var.availability_zones)   # one per AZ
+  allocation_id = aws_eip.nat[count.index].id
+  subnet_id     = aws_subnet.public[count.index].id
+}
+```
+
+Private route tables are also per-AZ, so a single NAT failure no longer takes down all private-subnet workloads.
+
+### Additional hardening (K8s)
+
+| Resource | File | Purpose |
+|---|---|---|
+| `securityContext` on backend pod | `04-backend.yaml` | `runAsNonRoot`, `runAsUser: 1001`, `allowPrivilegeEscalation: false`, drop ALL capabilities |
+| `securityContext` on frontend pod | `05-frontend.yaml` | `allowPrivilegeEscalation: false`, drop ALL capabilities |
+| HPA — backend | `07-hpa.yaml` | Scale 2→10 at 70% CPU; scale-down stabilised over 5 min |
+| HPA — frontend | `07-hpa.yaml` | Scale 2→6 at 70% CPU |
+| NetworkPolicy | `08-network-policy.yaml` | Deny-by-default; only allow explicit pod→pod paths |
+| PodDisruptionBudget | `09-pdb.yaml` | `minAvailable: 1` for backend and frontend during node drains |
+| ResourceQuota + LimitRange | `10-resource-quota.yaml` | Namespace ceiling (8 CPU / 16 Gi); per-container defaults and floors |
 
 ---
 

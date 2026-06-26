@@ -1,0 +1,25 @@
+---
+# Ensure at least one backend pod stays available during node drains / upgrades.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: backend-pdb
+  namespace: skyline
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: backend
+
+---
+# Ensure at least one frontend pod stays available during node drains / upgrades.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: frontend-pdb
+  namespace: skyline
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: frontend
